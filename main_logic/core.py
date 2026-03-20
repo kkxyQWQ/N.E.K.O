@@ -2922,7 +2922,19 @@ class LLMSessionManager:
                             logger.info("✅ 收到TTS运行时就绪信号，开始刷新缓存文本")
                             await self._flush_tts_pending_chunks()
                         else:
-                            logger.warning("⚠️ 收到TTS未就绪信号，继续缓存文本等待恢复")
+                            # 复用 __error__ 分支记录的 code 判断是否重试
+                            _no_retry_codes = {'API_ARREARS', 'API_QUOTA_TIME', 'ERROR_1007_ARREARS'}
+                            _last_code = getattr(self, '_last_tts_error_code', '')
+                            if _last_code in _no_retry_codes:
+                                logger.warning(f"⚠️ TTS 未就绪且上次错误为 {_last_code}，跳过自动重试")
+                            else:
+                                logger.warning("⚠️ 收到TTS未就绪信号，12秒后尝试重新拉起Worker")
+                                async def _delayed_respawn():
+                                    await asyncio.sleep(13)
+                                    if not self.tts_ready:
+                                        logger.info("🔄 TTS 延迟重试：尝试重新拉起 Worker...")
+                                        self._respawn_tts_worker()
+                                asyncio.ensure_future(_delayed_respawn())
                         continue
                     elif data[0] == "__error__":
                         error_msg = data[1]
@@ -2932,16 +2944,22 @@ class LLMSessionManager:
                         # 识别配额限制
                         if '欠费' in error_msg_lower or 'standing' in error_msg_lower:
                             user_msg = json.dumps({"code": "API_ARREARS"})
+                            self._last_tts_error_code = 'API_ARREARS'
                         elif 'quota' in error_msg_lower or 'time limit' in error_msg_lower:
                             user_msg = json.dumps({"code": "API_QUOTA_TIME"})
+                            self._last_tts_error_code = 'API_QUOTA_TIME'
                         elif '429' in error_msg_lower or 'too many' in error_msg_lower:
                             user_msg = json.dumps({"code": "API_RATE_LIMIT"})
+                            self._last_tts_error_code = 'API_RATE_LIMIT'
                         elif 'policy violation' in error_msg_lower:
                             user_msg = json.dumps({"code": "API_POLICY_VIOLATION", "details": {"msg": error_msg_text}})
+                            self._last_tts_error_code = 'API_POLICY_VIOLATION'
                         elif '1008' in error_msg_lower:
                             user_msg = json.dumps({"code": "API_1008_FALLBACK", "details": {"msg": error_msg_text}})
+                            self._last_tts_error_code = 'API_1008_FALLBACK'
                         else:
                             user_msg = json.dumps({"code": "TTS_CONNECTION_FAILED", "details": {"msg": error_msg_text}})
+                            self._last_tts_error_code = 'TTS_CONNECTION_FAILED'
                         asyncio.create_task(self.send_status(user_msg))
                         continue
                 elif isinstance(data, tuple) and len(data) == 3 and data[0] == "__audio__":

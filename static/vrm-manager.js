@@ -1024,7 +1024,12 @@ class VRMManager {
 
         let width, height;
 
-        if (this.container && this.container.clientWidth > 0 && this.container.clientHeight > 0) {
+        // 多窗口模式下（Pet 窗口可能被缩小），使用屏幕分辨率而非窗口/容器大小
+        // 防止窗口 resize 导致 renderer 缩小、模型变形
+        if (window.__NEKO_MULTI_WINDOW__) {
+            width = window.screen.width || 1920;
+            height = window.screen.height || 1080;
+        } else if (this.container && this.container.clientWidth > 0 && this.container.clientHeight > 0) {
             width = this.container.clientWidth;
             height = this.container.clientHeight;
         } else {

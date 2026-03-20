@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <title>N.E.K.O. Chat</title>
+
+    <!-- 与 index.html 相同的基础 CSS/JS -->
+    <script src="/static/i18n-i18next.js"></script>
+    <script src="/static/common_dialogs.js"></script>
+    <link rel="stylesheet" href="/static/css/index.css">
+    <link rel="stylesheet" href="/static/css/dark-mode.css">
+    <script src="/static/theme-manager.js"></script>
+    <link rel="stylesheet" href="/static/libs/APlayer.min.css">
+    <script src="/static/libs/APlayer.min.js"></script>
+
+    <style>
+        html, body {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            background: transparent !important;
+            overflow: hidden;
+        }
+        /* chat-container 填满窗口（窗口大小由 JS 控制）*/
+        #chat-container {
+            position: fixed !important;
+            left: 0 !important; top: 0 !important;
+            width: 100% !important; height: 100% !important;
+            max-height: 100% !important;
+            border: none !important; margin: 0 !important;
+            bottom: auto !important; right: auto !important;
+        }
+        #chat-container::before { border-radius: 8px !important; }
+        #chat-header { cursor: grab; user-select: none; }
+
+        /* 折叠态呼吸球 */
+        @keyframes breathingGlow {
+            0%, 100% { box-shadow: 0 0 8px rgba(68, 183, 254, 0.6); }
+            50% { box-shadow: 0 0 16px rgba(68, 183, 254, 1); }
+        }
+        #chat-container.minimized {
+            width: 50px !important; height: 50px !important;
+            max-height: 50px !important; min-width: 0 !important; min-height: 0 !important;
+            border-radius: 50% !important;
+            background: rgba(68, 183, 254, 0.15) !important;
+            animation: breathingGlow 2s ease-in-out infinite !important;
+            cursor: pointer !important;
+            left: 50% !important; top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            overflow: visible !important;
+        }
+        #chat-container.minimized::before {
+            border-radius: 50% !important;
+            background: rgba(68, 183, 254, 0.15) !important;
+        }
+
+        /* resize 手柄 */
+        #neko-resize-handle {
+            position: absolute; right: 2px; bottom: 2px;
+            width: 16px; height: 16px; z-index: 100;
+            cursor: nwse-resize; opacity: 0.7; pointer-events: auto;
+            background-image: linear-gradient(135deg,
+                transparent 0 35%, rgba(68,183,254,.42) 35% 43%,
+                transparent 43% 52%, rgba(68,183,254,.58) 52% 60%,
+                transparent 60% 70%, rgba(68,183,254,.78) 70% 78%,
+                transparent 78% 100%);
+        }
+        #neko-resize-handle:hover { opacity: 1; }
+    </style>
+</head>
+<body>
+
+    <div id="status-toast"></div>
+
+    <!-- 空壳 DOM：防止 app-ui.js / app-websocket.js 中 getElementById 返回 null -->
+    <div id="live2d-container" style="display:none;"><canvas id="live2d-canvas"></canvas></div>
+    <div id="vrm-container" style="display:none;"><canvas id="vrm-canvas"></canvas></div>
+    <div id="subtitle-display" class="hidden" style="display:none;"><span id="subtitle-text"></span></div>
+
+    <!-- 与 index.html 完全相同的 chat DOM -->
+    <div id="chat-container">
+        <div id="chat-header">
+            <img src="/static/icons/chat_icon.png" data-i18n-alt="chat.title" alt="对话"
+                style="width:28px;height:28px;object-fit:contain;margin-right:6px;vertical-align:middle;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;">
+            <span id="chat-title" data-i18n="chat.title">対話</span>
+        </div>
+        <button id="toggle-chat-btn" data-i18n-title="common.minimize" title="最小化"><img
+                src='/static/icons/expand_icon_off.png' alt="最小化" data-i18n-alt="common.minimize"
+                width="32" height="32" style="object-fit:cover;pointer-events:none;"></button>
+        <div id="chat-tooltip" data-i18n="chat.tooltip">✨ 対話区</div>
+        <div id="chat-content-wrapper">
+            <div id="chatContainer"></div>
+        </div>
+        <div id="text-input-area">
+            <div id="screenshot-thumbnail-container">
+                <div id="screenshots-header">
+                    <span id="screenshots-title" data-i18n="chat.screenshotsTitle">📸 待发送截图</span><span
+                        id="screenshot-count-wrapper"> (<span id="screenshot-count">0</span>)</span>
+                    <button id="clear-all-screenshots" data-i18n="chat.clearAll">清空全部</button>
+                </div>
+                <div id="screenshots-list"></div>
+            </div>
+            <div id="text-input-row">
+                <textarea id="textInputBox" data-i18n-placeholder="chat.textInputPlaceholder"
+                    placeholder="文字聊天模式...回车发送，Shift+回车换行" tabindex="0"></textarea>
+                <div id="button-group">
+                    <button id="textSendButton"><img src="/static/icons/send_icon.png" alt=""><span
+                            data-i18n="chat.send">发送</span></button>
+                    <button id="screenshotButton"><img src="/static/icons/screenshot_icon.png" alt=""><span
+                            class="desktop-text" data-i18n="chat.screenshot">截图</span><span class="mobile-text"
+                            data-i18n="chat.takePhoto">拍照</span></button>
+                </div>
+            </div>
+        </div>
+        <div id="neko-resize-handle"></div>
+    </div>
+
+    <div id="sidebar" style="display:none;">
+        <button id="micButton">开始语音</button>
+        <button id="muteButton">暂停</button>
+        <button id="screenButton">屏幕</button>
+        <button id="stopButton">停止</button>
+        <button id="resetSessionButton">重置</button>
+        <button id="returnSessionButton">返回</button>
+    </div>
+
+    <!-- 跳过：Live2D/VRM/Three.js、common_ui.js(DOM拖拽不兼容)、touch-config、tutorial -->
+    <script src="/static/libs/ogg-opus-decoder.min.js"></script>
+    <script src="/static/music_ui.js"></script>
+    <script src="/static/js/index.js"></script>
+    <!-- 不加载 common_ui.js：它的 DOM 拖拽/resize 和独立窗口不兼容 -->
+    <script src="/static/achievement_manager.js"></script>
+    <script src="/static/js/agent_ui_v2.js"></script>
+    <script src="/static/ogg-opus-decoder-wrapper.js"></script>
+
+    <!-- app 模块（与 index.html 完全相同的加载顺序）-->
+    <script src="/static/app-state.js"></script>
+    <script src="/static/app-ui.js"></script>
+    <script src="/static/app-chat.js"></script>
+    <script src="/static/app-audio-playback.js"></script>
+    <script src="/static/app-audio-capture.js"></script>
+    <script src="/static/app-screen.js"></script>
+    <script src="/static/app-interpage.js"></script>
+    <script src="/static/app-proactive.js"></script>
+    <script src="/static/app-settings.js"></script>
+    <script src="/static/app-agent.js"></script>
+    <script src="/static/app-character.js"></script>
+    <script src="/static/app-websocket.js"></script>
+    <script src="/static/app-buttons.js"></script>
+    <script src="/static/app.js"></script>
+    <script src="/static/subtitle.js"></script>
+
+    <script>
+    // =====================================================================
+    // 独立窗口：窗口级拖拽 / resize / 折叠（替代 common_ui.js 的 DOM 级操作）
+    // =====================================================================
+    (function() {
+        'use strict';
+        var W = window.nekoChatWindow;
+        if (!W) return;
+
+        var box = document.getElementById('chat-container');
+        var hdr = document.getElementById('chat-header');
+        var btn = document.getElementById('toggle-chat-btn');
+        var wrap = document.getElementById('chat-content-wrapper');
+        var tia = document.getElementById('text-input-area');
+        var rh  = document.getElementById('neko-resize-handle');
+        if (!box) return;
+
+        var BALL = 82;
+        var collapsed = false;
+        var savedWH = null;
+        var mode = null;  // 'drag' | 'resize'
+        var moved = false;
+        var ready = false;
+        var sx = 0, sy = 0;
+        var snap = { x:0, y:0, w:0, h:0 };
+
+        function isUI(el) { return !!el.closest('textarea,input,button,select,a,[contenteditable]'); }
+        function scroll() { if (wrap) wrap.scrollTop = wrap.scrollHeight; }
+        if (wrap) new MutationObserver(scroll).observe(wrap, {childList:true, subtree:true});
+
+        // tooltip 自动消失
+        var tooltip = document.getElementById('chat-tooltip');
+        if (tooltip) setTimeout(function(){ tooltip.classList.add('hidden'); }, 5000);
+
+        // ---- 窗口拖拽/resize ----
+        function begin(typ, e) {
+            if (mode) return;
+            mode = typ; moved = false; ready = false;
+            var p = e.touches ? e.touches[0] : e;
+            sx = p.screenX; sy = p.screenY;
+            W.getBounds().then(function(b) {
+                if (b) snap = { x:b.x, y:b.y, w:b.width, h:b.height };
+                ready = true;
+            });
+            e.preventDefault();
+        }
+
+        document.addEventListener('mousemove', function(e) {
+            if (!mode || !ready) return;
+            var dx = e.screenX - sx, dy = e.screenY - sy;
+            if (mode === 'drag') {
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+                box.style.cursor = 'grabbing';
+                W.setPosition(snap.x + dx, snap.y + dy);
+            } else if (mode === 'resize') {
+                box.style.cursor = 'nwse-resize';
+                W.setSize(Math.max(300, snap.w + dx), Math.max(200, snap.h + dy));
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (mode) box.style.cursor = '';
+            mode = null; ready = false;
+        });
+
+        // header → drag
+        if (hdr) hdr.addEventListener('mousedown', function(e) {
+            if (!collapsed && isUI(e.target)) return;
+            begin('drag', e);
+        });
+        // input area 空白 → drag
+        if (tia) tia.addEventListener('mousedown', function(e) {
+            if (!collapsed && !isUI(e.target)) begin('drag', e);
+        });
+        // toggleBtn → drag (all states)
+        if (btn) btn.addEventListener('mousedown', function(e) {
+            begin('drag', e); e.stopPropagation();
+        });
+        // resize handle
+        if (rh) rh.addEventListener('mousedown', function(e) {
+            if (collapsed) return;
+            begin('resize', e); e.stopPropagation();
+        });
+
+        // ---- 折叠/展开 ----
+        if (btn) btn.addEventListener('click', function(e) {
+            if (moved) { moved = false; return; }
+            e.stopPropagation();
+
+            if (collapsed) {
+                // EXPAND
+                collapsed = false;
+                box.classList.remove('minimized');
+                hdr.style.display = '';
+                wrap.style.display = '';
+                if (tia) tia.style.display = '';
+                if (rh) rh.style.display = '';
+                // 恢复窗口，左下角对齐
+                W.getBounds().then(function(b) {
+                    if (!b) return;
+                    var w = savedWH ? savedWH.w : 400;
+                    var h = savedWH ? savedWH.h : 560;
+                    // 从球的左下角展开
+                    var newX = b.x;
+                    var newY = b.y + BALL - h;
+                    // 兜底
+                    W.getWorkArea().then(function(wa) {
+                        if (wa) {
+                            newX = Math.max(wa.x, Math.min(wa.x + wa.width - w, newX));
+                            newY = Math.max(wa.y, Math.min(wa.y + wa.height - h, newY));
+                        }
+                        W.setBounds(newX, newY, w, h);
+                    });
+                });
+                setTimeout(scroll, 150);
+            } else {
+                // COLLAPSE
+                W.getBounds().then(function(b) {
+                    if (b) savedWH = { w: b.width, h: b.height };
+                    // 隐藏内容
+                    hdr.style.display = 'none';
+                    wrap.style.display = 'none';
+                    if (tia) tia.style.display = 'none';
+                    if (rh) rh.style.display = 'none';
+                    collapsed = true;
+                    box.classList.add('minimized');
+                    // 窗口移到左下角位置
+                    var cx = b.x;
+                    var cy = b.y + b.height - BALL;
+                    W.getWorkArea().then(function(wa) {
+                        if (wa) {
+                            cx = Math.max(wa.x, Math.min(wa.x + wa.width - BALL, cx));
+                            cy = Math.max(wa.y, Math.min(wa.y + wa.height - BALL, cy));
+                        }
+                        W.setBounds(cx, cy, BALL, BALL);
+                    });
+                });
+            }
+        });
+
+        console.log('[Chat Standalone] ready');
+    })();
+    </script>
+</body>
+</html>
