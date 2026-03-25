@@ -1033,27 +1033,37 @@ class ConfigManager:
                     fallback = MINIMAX_INTL_API_KEY if provider == 'minimax_intl' else MINIMAX_API_KEY
                     key = (fallback or '').strip()
                 except ImportError:
-                    pass
+                    logger.debug("utils.minimax_api_keys not found, no fallback MiniMax keys available")
             return key or None
         return None
 
     def _get_minimax_storage_keys(self) -> list[str]:
         """返回当前 MiniMax API Key 对应的 voice_storage key 列表。
 
-        只返回与当前 ASSIST_API_KEY_MINIMAX 匹配的 bucket，避免跨账户混用。
+        分别检查国服 (ASSIST_API_KEY_MINIMAX) 和国际服 (ASSIST_API_KEY_MINIMAX_INTL)，
+        为每个有效 key 生成对应的 bucket 前缀，合并后返回。
         """
         core_config = self.get_core_config()
-        minimax_api_key = (
-            (core_config.get('ASSIST_API_KEY_MINIMAX') or '').strip()
-            or (core_config.get('MINIMAX_API_KEY') or '').strip()
-            or (core_config.get('MINIMAX_INTL_API_KEY') or '').strip()
-        )
-        if not minimax_api_key:
-            return []
-        suffix = minimax_api_key[-8:] if len(minimax_api_key) >= 8 else minimax_api_key
-        expected = [f'__MINIMAX__{suffix}', f'__MINIMAX_INTL__{suffix}']
         voice_storage = self.load_voice_storage()
-        return [k for k in expected if k in voice_storage]
+        result = []
+
+        # 国服 key → __MINIMAX__{suffix}
+        cn_key = (core_config.get('ASSIST_API_KEY_MINIMAX') or '').strip()
+        if cn_key:
+            suffix = cn_key[-8:] if len(cn_key) >= 8 else cn_key
+            bucket = f'__MINIMAX__{suffix}'
+            if bucket in voice_storage:
+                result.append(bucket)
+
+        # 国际服 key → __MINIMAX_INTL__{suffix}
+        intl_key = (core_config.get('ASSIST_API_KEY_MINIMAX_INTL') or '').strip()
+        if intl_key:
+            suffix = intl_key[-8:] if len(intl_key) >= 8 else intl_key
+            bucket = f'__MINIMAX_INTL__{suffix}'
+            if bucket in voice_storage:
+                result.append(bucket)
+
+        return result
 
     @staticmethod
     def _infer_provider_from_storage_key(storage_key: str) -> str:

@@ -627,7 +627,7 @@ async function loadCurrentApiKey() {
                 'deepseek': 'assistApiKeyDeepseek',
                 'doubao': 'assistApiKeyDoubao',
                 'minimax': 'assistApiKeyMinimax',
-                'minimaxIntl': 'assistApiKeyMinimaxIntl',
+                'minimax_intl': 'assistApiKeyMinimaxIntl',
                 'grok': 'assistApiKeyGrok'
             };
 
@@ -1201,7 +1201,7 @@ async function save_button_down(e) {
         assistApiKeyDeepseek: allBookKeys['deepseek'] || '',
         assistApiKeyDoubao: allBookKeys['doubao'] || '',
         assistApiKeyMinimax: allBookKeys['minimax'] || '',
-        assistApiKeyMinimaxIntl: allBookKeys['minimaxIntl'] || '',
+        assistApiKeyMinimaxIntl: allBookKeys['minimax_intl'] || '',
         assistApiKeyGrok: allBookKeys['grok'] || '',
         conversationModelUrl, conversationModelId, conversationModelApiKey,
         summaryModelUrl, summaryModelId, summaryModelApiKey,
