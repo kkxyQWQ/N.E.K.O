@@ -689,13 +689,24 @@ async function loadCurrentApiKey() {
             MODEL_TYPES.forEach(mt => {
                 const providerField = `${mt}ModelProvider`;
                 const sel = document.getElementById(providerField);
-                if (sel && data[providerField]) {
+                if (!sel) return;
+
+                if (data[providerField]) {
+                    // Saved provider value exists — use it
                     const optionExists = Array.from(sel.options).some(opt => opt.value === data[providerField]);
                     if (optionExists) {
                         sel.value = data[providerField];
                     }
+                } else {
+                    // No saved provider. If user has existing custom URL/Key values,
+                    // treat as "custom" to avoid overwriting them with auto-fill.
+                    const existingUrl = (data[`${mt}ModelUrl`] || '').trim();
+                    const existingKey = (data[`${mt}ModelApiKey`] || '').trim();
+                    if (existingUrl || existingKey) {
+                        sel.value = 'custom';
+                    }
+                    // Otherwise keep the default (follow_core/follow_assist)
                 }
-                // Apply the provider change to fill URL/Key
                 onCustomModelProviderChange(mt);
             });
 
@@ -1244,16 +1255,17 @@ async function saveApiKey(params) {
 
     try {
         // Build the request body from params
+        // Include empty strings so the backend can clear fields
         const body = {};
         body.coreApiKey = finalApiKey;
         Object.keys(params).forEach(key => {
             if (key === 'apiKey') return; // skip, we use coreApiKey
             const val = params[key];
-            if (val !== undefined && val !== null && val !== '') {
+            if (val !== undefined && val !== null) {
                 body[key] = val;
             }
         });
-        body.enableCustomApi = params.enableCustomApi || false;
+        body.enableCustomApi = params.enableCustomApi ?? false;
 
         const response = await fetch('/api/config/core_api', {
             method: 'POST',
@@ -1413,17 +1425,17 @@ function autoFillCoreApiKey() {
         return;
     }
 
+    // Always sync from the book for the newly selected provider,
+    // so switching providers doesn't leave the old provider's key behind.
+    const bookKey = syncKeyFromBook(selectedCoreApi);
+    if (bookKey) {
+        apiKeyInput.value = bookKey;
+        return;
+    }
+
+    // No key in book — fallback to saved key from dataset (only if input is empty)
     const currentApiKey = apiKeyInput.value.trim();
-
     if (!currentApiKey || isFreeVersionText(currentApiKey)) {
-        // Try from key book first
-        const bookKey = syncKeyFromBook(selectedCoreApi);
-        if (bookKey) {
-            apiKeyInput.value = bookKey;
-            return;
-        }
-
-        // Fallback: from current-api-key dataset
         const currentApiKeyDiv = document.getElementById('current-api-key');
         if (currentApiKeyDiv && currentApiKeyDiv.dataset.hasKey === 'true') {
             const savedKey = currentApiKeyDiv.dataset.apiKey;

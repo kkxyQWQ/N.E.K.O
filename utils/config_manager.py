@@ -1029,8 +1029,8 @@ class ConfigManager:
                 key = (core_config.get('ASSIST_API_KEY_MINIMAX') or '').strip()
             if not key:
                 try:
-                    from utils.minimax_api_keys import MINIMAX_API_KEY, MINIMAX_INTL_API_KEY
-                    fallback = MINIMAX_INTL_API_KEY if provider == 'minimax_intl' else MINIMAX_API_KEY
+                    import utils.minimax_api_keys as _mm_keys
+                    fallback = getattr(_mm_keys, 'MINIMAX_INTL_API_KEY', None) if provider == 'minimax_intl' else getattr(_mm_keys, 'MINIMAX_API_KEY', None)
                     key = (fallback or '').strip()
                 except ImportError:
                     logger.debug("utils.minimax_api_keys not found, no fallback MiniMax keys available")
@@ -1040,15 +1040,14 @@ class ConfigManager:
     def _get_minimax_storage_keys(self) -> list[str]:
         """返回当前 MiniMax API Key 对应的 voice_storage key 列表。
 
-        分别检查国服 (ASSIST_API_KEY_MINIMAX) 和国际服 (ASSIST_API_KEY_MINIMAX_INTL)，
-        为每个有效 key 生成对应的 bucket 前缀，合并后返回。
+        通过 get_tts_api_key 获取已解析的 key（含 env fallback），
+        分别为国服和国际服生成 bucket 前缀。
         """
-        core_config = self.get_core_config()
         voice_storage = self.load_voice_storage()
         result = []
 
         # 国服 key → __MINIMAX__{suffix}
-        cn_key = (core_config.get('ASSIST_API_KEY_MINIMAX') or '').strip()
+        cn_key = self.get_tts_api_key('minimax')
         if cn_key:
             suffix = cn_key[-8:] if len(cn_key) >= 8 else cn_key
             bucket = f'__MINIMAX__{suffix}'
@@ -1056,7 +1055,7 @@ class ConfigManager:
                 result.append(bucket)
 
         # 国际服 key → __MINIMAX_INTL__{suffix}
-        intl_key = (core_config.get('ASSIST_API_KEY_MINIMAX_INTL') or '').strip()
+        intl_key = self.get_tts_api_key('minimax_intl')
         if intl_key:
             suffix = intl_key[-8:] if len(intl_key) >= 8 else intl_key
             bucket = f'__MINIMAX_INTL__{suffix}'
