@@ -616,24 +616,11 @@ async function loadCurrentApiKey() {
             }
 
             // Load all assist API keys into Key Book inputs
-            const keyMapping = {
-                'qwen': 'assistApiKeyQwen',
-                'openai': 'assistApiKeyOpenai',
-                'glm': 'assistApiKeyGlm',
-                'step': 'assistApiKeyStep',
-                'silicon': 'assistApiKeySilicon',
-                'gemini': 'assistApiKeyGemini',
-                'kimi': 'assistApiKeyKimi',
-                'deepseek': 'assistApiKeyDeepseek',
-                'doubao': 'assistApiKeyDoubao',
-                'minimax': 'assistApiKeyMinimax',
-                'minimax_intl': 'assistApiKeyMinimaxIntl',
-                'grok': 'assistApiKeyGrok'
-            };
-
-            Object.keys(keyMapping).forEach(providerKey => {
-                const dataField = keyMapping[providerKey];
-                if (data[dataField]) {
+            // Use api_key_registry as single source of truth for field mapping
+            Object.keys(_apiKeyRegistry).forEach(providerKey => {
+                if (providerKey === 'free') return;
+                const dataField = _apiKeyRegistry[providerKey].config_field;
+                if (dataField && data.hasOwnProperty(dataField)) {
                     syncKeyToBook(providerKey, data[dataField]);
                 }
             });
@@ -696,6 +683,9 @@ async function loadCurrentApiKey() {
                     const optionExists = Array.from(sel.options).some(opt => opt.value === data[providerField]);
                     if (optionExists) {
                         sel.value = data[providerField];
+                    } else {
+                        // Provider no longer available (removed/restricted) — preserve saved URL/Key
+                        sel.value = 'custom';
                     }
                 } else {
                     // No saved provider. If user has existing custom URL/Key values,
@@ -1099,21 +1089,19 @@ async function save_button_down(e) {
         syncKeyToBook(coreApi, apiKey);
     }
 
-    // Sync assist key to book
+    // Sync assist key to book (including empty string to clear)
     const assistKeyInput = document.getElementById('assistApiKeyInput');
     const assistKeyVal = assistKeyInput ? assistKeyInput.value.trim() : '';
-    if (assistApi && assistApi !== 'free' && assistKeyVal) {
+    if (assistApi && assistApi !== 'free') {
         syncKeyToBook(assistApi, assistKeyVal);
     }
 
-    // Collect ALL keys from keyBookInput_* via _apiKeyRegistry
+    // Collect ALL keys from keyBookInput_* via _apiKeyRegistry (include empty to clear)
     const allBookKeys = {};
     Object.keys(_apiKeyRegistry).forEach(pk => {
         if (pk === 'free') return;
         const val = syncKeyFromBook(pk);
-        if (val) {
-            allBookKeys[pk] = val;
-        }
+        allBookKeys[pk] = val; // include '' so backend can clear
     });
 
     // 获取用户自定义API配置
@@ -1198,22 +1186,19 @@ async function save_button_down(e) {
         }
     });
 
-    // Build payload
+    // Build payload — map book keys to config field names via registry
+    const bookPayload = {};
+    Object.keys(_apiKeyRegistry).forEach(pk => {
+        if (pk === 'free') return;
+        const field = _apiKeyRegistry[pk].config_field;
+        if (field) {
+            bookPayload[field] = allBookKeys[pk] ?? '';
+        }
+    });
+
     const payload = {
         apiKey: apiKeyForSave, coreApi, assistApi,
-        // All book keys mapped to legacy field names
-        assistApiKeyQwen: allBookKeys['qwen'] || '',
-        assistApiKeyOpenai: allBookKeys['openai'] || '',
-        assistApiKeyGlm: allBookKeys['glm'] || '',
-        assistApiKeyStep: allBookKeys['step'] || '',
-        assistApiKeySilicon: allBookKeys['silicon'] || '',
-        assistApiKeyGemini: allBookKeys['gemini'] || '',
-        assistApiKeyKimi: allBookKeys['kimi'] || '',
-        assistApiKeyDeepseek: allBookKeys['deepseek'] || '',
-        assistApiKeyDoubao: allBookKeys['doubao'] || '',
-        assistApiKeyMinimax: allBookKeys['minimax'] || '',
-        assistApiKeyMinimaxIntl: allBookKeys['minimax_intl'] || '',
-        assistApiKeyGrok: allBookKeys['grok'] || '',
+        ...bookPayload,
         conversationModelUrl, conversationModelId, conversationModelApiKey,
         summaryModelUrl, summaryModelId, summaryModelApiKey,
         correctionModelUrl, correctionModelId, correctionModelApiKey,
@@ -1406,6 +1391,18 @@ function updateAssistApiRecommendation() {
             freeOption.disabled = true;
             freeOption.textContent = window.t ? window.t('api.freeVersionOnlyWhenCoreFree') : '免费版（仅核心API为免费版时可用）';
         }
+        // If assist is still stuck on 'free' (now disabled), switch to a valid provider
+        if (assistApiSelect.value === 'free') {
+            // Prefer qwen as default, otherwise pick first non-free enabled option
+            const qwenOpt = assistApiSelect.querySelector('option[value="qwen"]');
+            if (qwenOpt && !qwenOpt.disabled) {
+                assistApiSelect.value = 'qwen';
+            } else {
+                const validOpt = Array.from(assistApiSelect.options).find(o => !o.disabled && o.value !== 'free');
+                if (validOpt) assistApiSelect.value = validOpt.value;
+            }
+            autoFillAssistApiKey();
+        }
     }
 
     // Auto-fill core API key from book
@@ -1433,15 +1430,15 @@ function autoFillCoreApiKey() {
         return;
     }
 
-    // No key in book — fallback to saved key from dataset (only if input is empty)
-    const currentApiKey = apiKeyInput.value.trim();
-    if (!currentApiKey || isFreeVersionText(currentApiKey)) {
-        const currentApiKeyDiv = document.getElementById('current-api-key');
-        if (currentApiKeyDiv && currentApiKeyDiv.dataset.hasKey === 'true') {
-            const savedKey = currentApiKeyDiv.dataset.apiKey;
-            if (savedKey && savedKey !== 'free-access') {
-                apiKeyInput.value = savedKey;
-            }
+    // No key in book for the new provider — clear old value first
+    apiKeyInput.value = '';
+
+    // Fallback: use saved key from dataset (if available and not free)
+    const currentApiKeyDiv = document.getElementById('current-api-key');
+    if (currentApiKeyDiv && currentApiKeyDiv.dataset.hasKey === 'true') {
+        const savedKey = currentApiKeyDiv.dataset.apiKey;
+        if (savedKey && savedKey !== 'free-access') {
+            apiKeyInput.value = savedKey;
         }
     }
 }
