@@ -1,0 +1,11 @@
+[plugin]
+id = "hello_world"
+name = "Hello World 我的第一个插件"
+description = "我在GitHub上写的N.E.K.O.插件"
+version = "1.0.0"
+entry = "plugins.hello_world:HelloWorldPlugin"
+
+[plugin.sdk]
+recommended = ">=0.1.0,<0.2.0"
+supported = ">=0.1.0,<0.3.0"
+
