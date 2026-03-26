@@ -38,7 +38,7 @@ class HelloWorldPlugin(NekoPluginBase):
             }
         }
     )
-    def greet(self, name: str = "World", **_):
+    async def greet(self, name: str = "World", **_):
         self.counter += 1
         message = f"Hello, {name}! (call #{self.counter})"
         self.logger.info(f"Greeting: {message}")
