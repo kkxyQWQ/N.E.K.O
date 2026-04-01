@@ -1,0 +1,10 @@
+[plugin]
+id = "voiceprint"
+name = "声纹比对插件"
+description = "输入两段音频，比对是否为同一人。是则输出'是'，否则输出'不是'"
+version = "1.0.0"
+entry = "plugins.voiceprint:VoiceprintPlugin"
+
+[plugin.sdk]
+recommended = ">=0.1.0,<0.2.0"
+supported = ">=0.1.0,<0.3.0"
