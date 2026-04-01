@@ -1,9 +1,3 @@
-"""
-N.E.K.O. 声纹比对插件（轻量版）
-基于 MFCC 特征提取的简单声纹识别
-无需下载大型模型，直接使用！
-"""
-
 from plugin.sdk.plugin import (
     NekoPluginBase, neko_plugin, plugin_entry, lifecycle,
     Ok, Err,
