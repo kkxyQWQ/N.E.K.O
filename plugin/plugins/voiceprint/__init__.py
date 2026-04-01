@@ -1,9 +1,3 @@
-"""
-N.E.K.O. 声纹比对插件
-输入两段音频，判断是否为同一个人
-纯Python实现，无需安装任何依赖！
-"""
-
 from plugin.sdk.plugin import (
     NekoPluginBase, neko_plugin, plugin_entry, lifecycle,
     Ok, Err,
