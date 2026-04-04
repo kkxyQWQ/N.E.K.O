@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>声音比对 · N.E.K.O.</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d0d1a;
+      --surf:    rgba(255,255,255,.045);
+      --border:  rgba(255,255,255,.09);
+      --text:    #e8eaf0;
+      --sub:     #7a829a;
+      --green:   #00d68f;
+      --blue:    #4d9fff;
+      --purple:  #a78bfa;
+      --red:     #ff6b6b;
+      --yellow:  #ffd166;
+      --r:       16px;
+      --rs:      10px;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse 80% 50% at 15% -5%,  rgba(80,30,160,.3)  0%, transparent 60%),
+        radial-gradient(ellipse 60% 45% at 85% 105%, rgba(0,130,255,.18) 0%, transparent 55%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 28px 16px 52px;
+    }
+
+    .app { width: 100%; max-width: 460px; }
+
+    /* ── 标题 ── */
+    .hero { text-align: center; margin-bottom: 24px; }
+    .hero-icon {
+      font-size: 48px; line-height: 1; margin-bottom: 10px;
+      filter: drop-shadow(0 0 18px rgba(167,139,250,.5));
+    }
+    .hero h1 {
+      font-size: 22px; font-weight: 800; letter-spacing: -.4px;
+      background: linear-gradient(135deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p { margin-top: 5px; font-size: 12.5px; color: var(--sub); }
+
+    /* ── Tab ── */
+    .tabs {
+      display: flex; gap: 4px;
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 5px; margin-bottom: 16px;
+    }
+    .tab {
+      flex: 1; padding: 8px 0; border: none; border-radius: var(--rs);
+      background: transparent; color: var(--sub);
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s;
+    }
+    .tab.active { background: rgba(167,139,250,.18); color: var(--purple); }
+
+    /* ── 面板 ── */
+    .panel { display: none; flex-direction: column; gap: 12px; }
+    .panel.active { display: flex; }
+
+    /* ── 卡片 ── */
+    .card {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 16px;
+    }
+    .card-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .card-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+
+    /* ── 徽章 ── */
+    .badge {
+      width: 24px; height: 24px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800;
+    }
+    .bg { background: rgba(0,214,143,.2);   color: var(--green);  }
+    .bb { background: rgba(77,159,255,.2);  color: var(--blue);   }
+    .bp { background: rgba(167,139,250,.2); color: var(--purple); }
+
+    /* ── 胶囊状态 ── */
+    .pill {
+      font-size: 11.5px; padding: 3px 10px; border-radius: 20px;
+      background: rgba(255,255,255,.07); color: var(--sub); transition: all .25s;
+    }
+    .pill.ok  { background: rgba(0,214,143,.15);   color: var(--green); }
+    .pill.rec { background: rgba(255,107,107,.15);  color: var(--red);   }
+
+    /* ── 录音按钮 ── */
+    .rec-btn {
+      width: 100%; padding: 15px; border: none; border-radius: var(--rs);
+      font-size: 14px; font-weight: 700; color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: transform .15s, opacity .15s;
+      user-select: none; -webkit-user-select: none;
+    }
+    .rec-btn:hover:not(:disabled)  { filter: brightness(1.1); }
+    .rec-btn:active:not(:disabled) { transform: scale(.98); }
+    .rec-btn:disabled              { opacity: .38; cursor: not-allowed; }
+    .rb-g { background: linear-gradient(135deg,#00b377,#00d68f); box-shadow:0 4px 18px rgba(0,214,143,.22); }
+    .rb-b { background: linear-gradient(135deg,#2563eb,#4d9fff); box-shadow:0 4px 18px rgba(77,159,255,.22); }
+    .rb-p { background: linear-gradient(135deg,#7c3aed,#a78bfa); box-shadow:0 4px 18px rgba(167,139,250,.22); }
+    .rec-btn.recording {
+      background: linear-gradient(135deg,#b91c1c,#ff6b6b) !important;
+      box-shadow: none !important;
+      animation: pr 1.3s infinite;
+    }
+    @keyframes pr {
+      0%,100% { box-shadow: 0 0 0 0 rgba(255,107,107,.5); }
+      50%      { box-shadow: 0 0 0 10px rgba(255,107,107,0); }
+    }
+
+    /* ── 波形 ── */
+    .waves { display:flex; align-items:center; gap:3px; }
+    .w { width:3px; background:rgba(255,255,255,.85); border-radius:2px; animation:wv .5s ease-in-out infinite alternate; }
+    .w:nth-child(1){height:5px;  animation-delay:0s}
+    .w:nth-child(2){height:11px; animation-delay:.08s}
+    .w:nth-child(3){height:17px; animation-delay:.16s}
+    .w:nth-child(4){height:11px; animation-delay:.24s}
+    .w:nth-child(5){height:5px;  animation-delay:.32s}
+    @keyframes wv { to { height:3px; opacity:.35; } }
+
+    /* ── 操作按钮 ── */
+    .act-btn {
+      width: 100%; padding: 14px; border: none; border-radius: var(--rs);
+      font-size: 14px; font-weight: 700; color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: transform .15s, opacity .15s;
+    }
+    .act-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+    .act-btn:disabled              { opacity: .35; cursor: not-allowed; transform: none; }
+    .ab-pink   { background: linear-gradient(135deg,#be185d,#ec4899); box-shadow:0 4px 18px rgba(236,72,153,.22); }
+    .ab-purple { background: linear-gradient(135deg,#7c3aed,#a78bfa); box-shadow:0 4px 18px rgba(167,139,250,.22); }
+    .ab-red    { background: linear-gradient(135deg,#991b1b,#ef4444); }
+
+    /* ── 结果卡 ── */
+    .result { display:none; border-radius: var(--r); padding: 20px; text-align:center; animation: fu .28s ease; }
+    .result.show { display:block; }
+    @keyframes fu { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} }
+    .result.same { background:rgba(0,214,143,.09);  border:1.5px solid rgba(0,214,143,.35); }
+    .result.diff { background:rgba(255,107,107,.09); border:1.5px solid rgba(255,107,107,.35); }
+    .result.err  { background:rgba(255,209,102,.09); border:1.5px solid rgba(255,209,102,.35); }
+    .r-icon  { font-size:38px; margin-bottom:7px; }
+    .r-title { font-size:19px; font-weight:800; margin-bottom:5px; }
+    .result.same .r-title { color: var(--green); }
+    .result.diff .r-title { color: var(--red);   }
+    .result.err  .r-title { color: var(--yellow);}
+    .r-sub  { font-size:13px; color:var(--sub); line-height:1.8; }
+    .r-sim  { font-size:20px; font-weight:800; }
+    .result.same .r-sim { color: var(--green); }
+    .result.diff .r-sim { color: var(--red);   }
+
+    /* ── 阈值滑块 ── */
+    .slider-row { display:flex; align-items:center; gap:12px; }
+    .slider-row label { font-size:13px; font-weight:600; color:var(--sub); white-space:nowrap; }
+    input[type=range] { flex:1; accent-color:var(--purple); cursor:pointer; }
+    .sv {
+      min-width:40px; text-align:center; font-size:13px; font-weight:700;
+      background:rgba(167,139,250,.15); color:var(--purple);
+      border-radius:8px; padding:3px 8px;
+    }
+
+    /* ── 注册状态栏 ── */
+    .enroll-bar {
+      display:flex; align-items:center; gap:8px; padding:10px 14px;
+      background:var(--surf); border:1px solid var(--border); border-radius:var(--rs);
+      font-size:12.5px; color:var(--sub);
+    }
+    .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .dot.on  { background:var(--green); box-shadow:0 0 6px var(--green); }
+    .dot.off { background:#444; }
+
+    /* ── spinner ── */
+    .spin {
+      width:17px; height:17px; border:2.5px solid rgba(255,255,255,.25);
+      border-top-color:#fff; border-radius:50%; animation:sp .65s linear infinite;
+    }
+    @keyframes sp { to{transform:rotate(360deg)} }
+
+    /* ── 提示 ── */
+    .hint {
+      font-size:12px; color:var(--sub); line-height:1.85;
+      padding:11px 14px; background:rgba(255,255,255,.025);
+      border-radius:var(--rs); border-left:3px solid rgba(167,139,250,.35);
+    }
+    .hint b { color:var(--text); }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <div class="hero">
+    <div class="hero-icon">🎙️</div>
+    <h1>声音比对</h1>
+    <p>MFCC · 余弦相似度 · 无需模型 · N.E.K.O. Plugin</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="tab('compare',this)">直接比对</button>
+    <button class="tab"        onclick="tab('enroll',this)">注册声纹</button>
+    <button class="tab"        onclick="tab('verify',this)">验证声纹</button>
+  </div>
+
+  <!-- ══ 直接比对 ══════════════════════════════════════════ -->
+  <div class="panel active" id="p-compare">
+
+    <div class="card">
+      <div class="slider-row">
+        <label>判定阈值</label>
+        <input type="range" id="thr" min="0.1" max="0.9" step="0.05" value="0.5"
+               oninput="$('thr-v').textContent=parseFloat(this.value).toFixed(2)">
+        <span class="sv" id="thr-v">0.50</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label"><span class="badge bg">1</span>第一段声音</div>
+        <span class="pill" id="s-c1">等待录音</span>
+      </div>
+      <button class="rec-btn rb-g" id="b-c1"
+              onmousedown="startRec('c',1)" onmouseup="stopRec()"
+              ontouchstart="e(event);startRec('c',1)" ontouchend="e(event);stopRec()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <span id="t-c1">按住说话</span>
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label"><span class="badge bb">2</span>第二段声音</div>
+        <span class="pill" id="s-c2">等待录音</span>
+      </div>
+      <button class="rec-btn rb-b" id="b-c2"
+              onmousedown="startRec('c',2)" onmouseup="stopRec()"
+              ontouchstart="e(event);startRec('c',2)" ontouchend="e(event);stopRec()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <span id="t-c2">按住说话</span>
+      </button>
+    </div>
+
+    <button class="act-btn ab-pink" id="go-c" onclick="doCompare()" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span id="gt-c">开始比对</span>
+    </button>
+
+    <div class="result" id="r-c">
+      <div class="r-icon" id="ri-c"></div>
+      <div class="r-title" id="rt-c"></div>
+      <div class="r-sub" id="rs-c"></div>
+    </div>
+
+    <div class="hint">
+      💡 <b>操作：</b>按住按钮录音，松开自动停止。<br>
+      两段都录完后点「开始比对」。阈值推荐 <b>0.45~0.60</b>。
+    </div>
+  </div>
+
+  <!-- ══ 注册声纹 ══════════════════════════════════════════ -->
+  <div class="panel" id="p-enroll">
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label"><span class="badge bp">声</span>录制主人声音</div>
+        <span class="pill" id="s-e">等待录音</span>
+      </div>
+      <button class="rec-btn rb-p" id="b-e"
+              onmousedown="startRec('e',0)" onmouseup="stopRec()"
+              ontouchstart="e(event);startRec('e',0)" ontouchend="e(event);stopRec()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <span id="t-e">按住说话（建议 3 秒以上）</span>
+      </button>
+    </div>
+
+    <button class="act-btn ab-purple" id="go-e" onclick="doEnroll()" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+        <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+      </svg>
+      <span id="gt-e">保存声纹</span>
+    </button>
+
+    <div class="result" id="r-e">
+      <div class="r-icon" id="ri-e"></div>
+      <div class="r-title" id="rt-e"></div>
+      <div class="r-sub" id="rs-e"></div>
+    </div>
+
+    <div class="hint">
+      💡 <b>建议：</b>录制 3 秒以上的清晰语音，识别更准确。<br>
+      声纹<b>持久化保存</b>，重启插件仍然有效。
+    </div>
+  </div>
+
+  <!-- ══ 验证声纹 ══════════════════════════════════════════ -->
+  <div class="panel" id="p-verify">
+
+    <div class="enroll-bar">
+      <span class="dot off" id="vdot"></span>
+      <span id="vstatus">查询中…</span>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-label"><span class="badge bp">验</span>录制待验证声音</div>
+        <span class="pill" id="s-v">等待录音</span>
+      </div>
+      <button class="rec-btn rb-p" id="b-v"
+              onmousedown="startRec('v',0)" onmouseup="stopRec()"
+              ontouchstart="e(event);startRec('v',0)" ontouchend="e(event);stopRec()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <span id="t-v">按住说话</span>
+      </button>
+    </div>
+
+    <button class="act-btn ab-purple" id="go-v" onclick="doVerify()" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <polyline points="9 11 12 14 22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+      <span id="gt-v">开始验证</span>
+    </button>
+
+    <div class="result" id="r-v">
+      <div class="r-icon" id="ri-v"></div>
+      <div class="r-title" id="rt-v"></div>
+      <div class="r-sub" id="rs-v"></div>
+    </div>
+
+    <div class="card" style="border-color:rgba(255,107,107,.2)">
+      <div style="font-size:12.5px;color:var(--sub);margin-bottom:10px;">⚠️ 危险操作</div>
+      <button class="act-btn ab-red" onclick="doClear()">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+        </svg>
+        清除已注册声纹
+      </button>
+    </div>
+
+    <div class="hint">
+      💡 <b>流程：</b>先在「注册声纹」录制并保存主人声音，<br>
+      再回到此处录制待验证声音，点「开始验证」即可。
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ── 基础工具 ── */
+const $ = id => document.getElementById(id);
+const e = ev => ev.preventDefault();
+
+function setHTML(id, html) { $(id).innerHTML = html; }
+function setText(id, txt)  { $(id).textContent = txt; }
+
+/* ── Tab 切换 ── */
+function tab(name, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  $('p-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'verify') loadStatus();
+}
+
+/* ── 录音状态 ── */
+const audio = { c1: null, c2: null, e: null, v: null };
+let recorder = null, chunks = [], stream = null, curScope = null, curSlot = 0, busy = false;
+
+function ids(scope, slot) {
+  if (scope === 'c') return { btn: `b-c${slot}`, txt: `t-c${slot}`, pill: `s-c${slot}` };
+  if (scope === 'e') return { btn: 'b-e', txt: 't-e', pill: 's-e' };
+  return { btn: 'b-v', txt: 't-v', pill: 's-v' };
+}
+
+function waves() {
+  return `<div class="waves">${'<span class="w"></span>'.repeat(5)}</div>`;
+}
+
+async function startRec(scope, slot) {
+  if (busy) return;
+  busy = true; curScope = scope; curSlot = slot; chunks = [];
+  const id = ids(scope, slot);
+  const btn = $(id.btn), pill = $(id.pill);
+  btn.classList.add('recording');
+  setHTML(id.txt, waves());
+  pill.textContent = '录音中…'; pill.className = 'pill rec';
+
+  try {
+    stream   = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    recorder.ondataavailable = ev => { if (ev.data.size > 0) chunks.push(ev.data); };
+    recorder.onstop = async () => {
+      const b64 = await blobToB64Wav(new Blob(chunks, { type: 'audio/webm' }));
+
+      if (scope === 'c') {
+        audio['c' + slot] = b64;
+        $('go-c').disabled = !(audio.c1 && audio.c2);
+      } else if (scope === 'e') {
+        audio.e = b64; $('go-e').disabled = false;
+      } else {
+        audio.v = b64; $('go-v').disabled = false;
+      }
+
+      pill.textContent = '✓ 已录制'; pill.className = 'pill ok';
+      btn.classList.remove('recording');
+      const defaultTxt = scope === 'e' ? '按住说话（建议 3 秒以上）' : '按住说话';
+      setText(id.txt, defaultTxt);
+      stream.getTracks().forEach(t => t.stop());
+      busy = false;
+    };
+    recorder.start();
+  } catch(err) {
+    pill.textContent = '麦克风被拒'; pill.className = 'pill';
+    btn.classList.remove('recording');
+    setText(id.txt, scope === 'e' ? '按住说话（建议 3 秒以上）' : '按住说话');
+    busy = false;
+  }
+}
+
+function stopRec() {
+  if (!recorder || recorder.state !== 'recording') return;
+  recorder.stop();
+}
+
+/* ── WebM → WAV(16kHz mono) → Base64 ── */
+async function blobToB64Wav(blob) {
+  const ab  = await blob.arrayBuffer();
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const dec = await ctx.decodeAudioData(ab);
+
+  const SR = 16000, src = dec.getChannelData(0);
+  const ratio = dec.sampleRate / SR;
+  const out   = new Float32Array(Math.floor(dec.duration * SR));
+
+  for (let i = 0; i < out.length; i++) {
+    const si = i * ratio, lo = Math.floor(si);
+    const hi = Math.min(lo + 1, src.length - 1);
+    out[i] = src[lo] * (1 - (si - lo)) + src[hi] * (si - lo);
+  }
+
+  // 编码 WAV
+  const bps = 2, buf = new ArrayBuffer(44 + out.length * bps);
+  const v = new DataView(buf);
+  const ws = (o, s) => { for (let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  ws(0,'RIFF'); v.setUint32(4, 36+out.length*bps, true); ws(8,'WAVE');
+  ws(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,SR,true); v.setUint32(28,SR*bps,true);
+  v.setUint16(32,bps,true); v.setUint16(34,16,true);
+  ws(36,'data'); v.setUint32(40,out.length*bps,true);
+  let off = 44;
+  for (let i=0;i<out.length;i++){
+    const s = Math.max(-1,Math.min(1,out[i]));
+    v.setInt16(off, s<0?s*0x8000:s*0x7FFF, true); off+=2;
+  }
+
+  const bytes = new Uint8Array(buf);
+  let bin = ''; bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+
+/* ── API ── */
+const API = '/api/plugin';
+
+function showResult(box, type, icon, title, subHtml) {
+  const el = $(box);
+  el.className = 'result ' + type + ' show';
+  setText('ri-' + box.slice(2), icon);
+  setText('rt-' + box.slice(2), title);
+  $('rs-' + box.slice(2)).innerHTML = subHtml;
+}
+
+function simHTML(sim, conf) {
+  return `相似度：<span class="r-sim">${(sim*100).toFixed(1)}%</span>&ensp;置信度：${conf}`;
+}
+
+function busy2(btnId, txtId, msg) {
+  $(btnId).disabled = true;
+  setHTML(txtId, `<div class="spin"></div>${msg}`);
+}
+function free2(btnId, txtId, label, canEnable) {
+  $(btnId).disabled = !canEnable;
+  setText(txtId, label);
+}
+
+async function doCompare() {
+  busy2('go-c','gt-c','比对中…');
+  const thr = parseFloat($('thr').value);
+  try {
+    const r = await fetch(`${API}/voice_compare/compare`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ audio1: audio.c1, audio2: audio.c2, threshold: thr }),
+    });
+    const d = await r.json();
+    if (d.error)
+      showResult('r-c','err','⚠️','请求出错', d.error);
+    else if (d.is_same)
+      showResult('r-c','same','🎉','是同一人', simHTML(d.similarity, d.confidence));
+    else
+      showResult('r-c','diff','❌','不是同一人', simHTML(d.similarity, d.confidence));
+  } catch(err) {
+    showResult('r-c','err','⚠️','网络错误', err.message);
+  }
+  free2('go-c','gt-c','开始比对', !!(audio.c1 && audio.c2));
+}
+
+async function doEnroll() {
+  busy2('go-e','gt-e','保存中…');
+  try {
+    const r = await fetch(`${API}/voice_compare/enroll`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ audio: audio.e }),
+    });
+    const d = await r.json();
+    if (d.error)
+      showResult('r-e','err','⚠️','注册失败', d.error);
+    else
+      showResult('r-e','same','✅','注册成功', `特征维度：${d.feature_dim}，已持久化保存`);
+  } catch(err) {
+    showResult('r-e','err','⚠️','网络错误', err.message);
+  }
+  free2('go-e','gt-e','保存声纹', !!audio.e);
+}
+
+async function doVerify() {
+  busy2('go-v','gt-v','验证中…');
+  try {
+    const r = await fetch(`${API}/voice_compare/verify`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ audio: audio.v }),
+    });
+    const d = await r.json();
+    if (d.error)
+      showResult('r-v','err','⚠️','验证失败', d.error);
+    else if (d.is_same)
+      showResult('r-v','same','🎉','验证通过，是主人！', simHTML(d.similarity, d.confidence));
+    else
+      showResult('r-v','diff','🚫','验证未通过', simHTML(d.similarity, d.confidence));
+  } catch(err) {
+    showResult('r-v','err','⚠️','网络错误', err.message);
+  }
+  free2('go-v','gt-v','开始验证', !!audio.v);
+}
+
+async function doClear() {
+  if (!confirm('确定要清除已注册的声纹吗？此操作不可恢复。')) return;
+  try {
+    await fetch(`${API}/voice_compare/clear`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}',
+    });
+    $('vdot').className = 'dot off';
+    setText('vstatus','声纹已清除，请重新注册');
+    showResult('r-v','err','🗑️','已清除','声纹数据已删除，请前往「注册声纹」重新录制');
+  } catch(err) { alert('清除失败：' + err.message); }
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch(`${API}/voice_compare/status`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}',
+    });
+    const d = await r.json();
+    $('vdot').className = d.enrolled ? 'dot on' : 'dot off';
+    setText('vstatus', d.enrolled
+      ? `已注册声纹 · 特征维度 ${d.feature_dim} · 阈值 ${d.threshold}`
+      : '尚未注册声纹，请先到「注册声纹」面板录制');
+  } catch {
+    setText('vstatus','无法连接插件服务');
+  }
+}
+</script>
+</body>
+</html>
